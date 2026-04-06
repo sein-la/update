@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer');
 (async () => {
   const browser = await puppeteer.launch({
     headless: "new",
-    args: ['--no-sandbox', '--disable-setuid-sandbox'] // GitHub Actionsで動かすための必須オプション
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();
 
@@ -11,28 +11,35 @@ const puppeteer = require('puppeteer');
     // 1. ログインページへアクセス
     await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle2' });
 
-    // 2. ログイン実行
+    // 2. まず会員IDを入力して「次へ」ボタンを押す
     await page.type('input[name="memberid"]', process.env.XSERVER_ID);
-    await page.type('input[name="password"]', process.env.XSERVER_PW);
     await Promise.all([
-      page.click('button[type="submit"]'),
+      page.click('button[type="submit"]'), // 「次へ」ボタン
       page.waitForNavigation({ waitUntil: 'networkidle2' }),
     ]);
 
-    // 3. 無料VPSの管理ページへ移動
+    // 3. パスワード入力欄が表示されるまで待機してから入力
+    await page.waitForSelector('input[name="password"]', { visible: true });
+    await page.type('input[name="password"]', process.env.XSERVER_PW);
+
+    // 4. ログイン実行
+    await Promise.all([
+      page.click('button[type="submit"]'), // 「ログイン」ボタン
+      page.waitForNavigation({ waitUntil: 'networkidle2' }),
+    ]);
+
+    // 5. 無料VPSの管理ページへ移動
     await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
 
-    // 4. 「更新」ボタンを探してクリック
-    // ※ボタンのテキスト「更新する」を基準に探します
+    // 6. 「更新する」ボタンを探してクリック
     const updateButton = await page.$x("//a[contains(text(), '更新する')]");
     
     if (updateButton.length > 0) {
       await updateButton[0].click();
       console.log("✅ 更新処理を実行しました。");
-      // 完了まで少し待機
       await new Promise(r => setTimeout(r, 5000));
     } else {
-      console.log("ℹ️ 更新ボタンが見つかりませんでした。まだ更新期間外の可能性があります。");
+      console.log("ℹ️ 更新ボタンが見つかりませんでした。まだ更新期間外です。");
     }
 
   } catch (error) {
