@@ -15,9 +15,10 @@ const puppeteer = require('puppeteer');
     await page.waitForSelector('input[name="memberid"]');
     await page.type('input[name="memberid"]', process.env.XSERVER_ID);
     
-    // 3. 「次へ」ボタンをクリック（名前属性で指定）
+    // 3. 「次へ」というテキストを持つボタンをクリック
+    const nextButton = await page.waitForSelector('xpath///button[contains(., "次へ")]');
     await Promise.all([
-      page.click('button[name="login_step1"]'),
+      nextButton.click(),
       page.waitForNavigation({ waitUntil: 'networkidle2' }),
     ]);
 
@@ -25,9 +26,10 @@ const puppeteer = require('puppeteer');
     await page.waitForSelector('input[name="password"]', { visible: true });
     await page.type('input[name="password"]', process.env.XSERVER_PW);
 
-    // 5. ログイン実行（確定ボタンをクリック）
+    // 5. 「ログインする」というテキストを持つボタンをクリック
+    const loginButton = await page.waitForSelector('xpath///button[contains(., "ログインする")]');
     await Promise.all([
-      page.click('button[name="login_step2"]'),
+      loginButton.click(),
       page.waitForNavigation({ waitUntil: 'networkidle2' }),
     ]);
 
