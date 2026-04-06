@@ -2,15 +2,15 @@ name: XServer Auto Renew
 
 on:
   schedule:
-    # 2GBプランなら4日ごとなので、余裕を持って「毎日」または「2日おき」に実行
-    - cron: '0 15 */2 * *' # 日本時間 0:00 (UTC 15:00) に2日おきに実行
-  workflow_dispatch: # 手動でテスト実行できるようにする設定
+    - cron: '0 15 * * *' # 毎日 日本時間 0:00 に実行
+  workflow_dispatch:     # 手動実行ボタンを有効化
 
 jobs:
-  build:
+  renew:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -19,10 +19,10 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install puppeteer
 
-      - name: Run automation script
+      - name: Run renewal script
+        run: node index.js
         env:
           XSERVER_ID: ${{ secrets.XSERVER_ID }}
           XSERVER_PW: ${{ secrets.XSERVER_PW }}
-        run: node index.js
