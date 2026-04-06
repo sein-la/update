@@ -11,50 +11,44 @@ const puppeteer = require('puppeteer');
     ]
   });
   const page = await browser.newPage();
+  
+  // ボット検知を避けるためのWebdriver無効化
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+  });
+
   await page.setViewport({ width: 1280, height: 1024 });
 
   try {
     console.log("1. ログインページへ移動中...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle0' });
+    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle2' });
 
     console.log("2. 会員IDを入力中...");
     await page.waitForSelector('input[name="memberid"]', { visible: true });
-    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 100 });
+    await page.focus('input[name="memberid"]');
+    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 200 });
     
-    console.log("3. 全ボタンを走査して『次へ』をクリック...");
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-      const target = buttons.find(b => b.textContent.includes('次へ') || b.value?.includes('次へ'));
-      if (target) {
-        target.click();
-      } else {
-        // ボタンが見つからない場合はフォームを強制送信
-        document.querySelector('form').submit();
-      }
-    });
+    console.log("3. Enterキーで『次へ』を試行...");
+    await new Promise(r => setTimeout(r, 1000));
+    await page.keyboard.press('Enter');
 
     console.log("4. パスワード欄の出現を待機...");
-    // 待機時間を少し短くし、失敗時にすぐ次の処理へ回せるようにします
-    await page.waitForSelector('input[name="password"]', { visible: true, timeout: 30000 });
-    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 100 });
+    // 最大60秒まで待機時間を延長
+    await page.waitForSelector('input[name="password"]', { visible: true, timeout: 60000 });
+    
+    console.log("5. パスワードを入力中...");
+    await page.focus('input[name="password"]');
+    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 200 });
+    await new Promise(r => setTimeout(r, 1000));
+    await page.keyboard.press('Enter');
 
-    console.log("5. ログイン実行...");
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-      const target = buttons.find(b => b.textContent.includes('ログイン') || b.value?.includes('ログイン'));
-      if (target) {
-        target.click();
-      } else {
-        document.querySelector('form').submit();
-      }
-    });
+    console.log("6. ログイン後の遷移を待機...");
+    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
-    await page.waitForNavigation({ waitUntil: 'networkidle0' });
+    console.log("7. VPS管理画面へ移動...");
+    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
 
-    console.log("6. VPS管理画面へ移動...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle0' });
-
-    console.log("7. 更新ボタンを確認中...");
+    console.log("8. 更新ボタンを確認中...");
     await new Promise(r => setTimeout(r, 5000));
     const result = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a'));
