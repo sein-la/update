@@ -3,50 +3,44 @@ const puppeteer = require('puppeteer');
 (async () => {
   const browser = await puppeteer.launch({
     headless: "new",
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ja']
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox', 
+      '--lang=ja',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 1024 });
 
   try {
     console.log("1. ログインページへ移動中...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle0' });
+    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle2' });
 
     console.log("2. 会員IDを入力中...");
     await page.waitForSelector('input[name="memberid"]', { visible: true });
-    await page.focus('input[name="memberid"]');
-    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 150 });
+    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 100 });
     
-    // 少し待ってからEnterキーを叩く
-    await new Promise(r => setTimeout(r, 1000));
-    await page.keyboard.press('Enter');
+    console.log("3. 『次へ』を物理クリック...");
+    const nextBtn = await page.waitForSelector('button[name="login_step1"]');
+    // 確実にボタンの真ん中をクリックする
+    await nextBtn.click({ delay: 100 });
 
-    console.log("3. パスワード欄の出現を待機...");
-    // 30秒待っても出ない場合は、現在の画面に何が表示されているか確認する
-    try {
-      await page.waitForSelector('input[name="password"]', { visible: true, timeout: 20000 });
-    } catch (e) {
-      const text = await page.evaluate(() => document.body.innerText);
-      if (text.includes("ロボット")) {
-        throw new Error("ロボットチェック（CAPTCHA）が表示されました。");
-      } else if (text.includes("正しくありません")) {
-        throw new Error("会員IDが正しくありません。");
-      } else {
-        throw new Error(`パスワード欄が出ません。画面内容: ${text.substring(0, 100)}...`);
-      }
-    }
+    console.log("4. パスワード欄の出現を待機...");
+    await page.waitForSelector('input[name="password"]', { visible: true, timeout: 30000 });
+    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 100 });
 
-    console.log("4. パスワードを入力中...");
-    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 150 });
-    await page.keyboard.press('Enter');
+    console.log("5. ログイン実行...");
+    const loginBtn = await page.waitForSelector('button[name="login_step2"]');
+    await Promise.all([
+      loginBtn.click({ delay: 100 }),
+      page.waitForNavigation({ waitUntil: 'networkidle2' }),
+    ]);
 
-    console.log("5. ログイン後の遷移を待機...");
-    await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
+    console.log("6. VPS管理画面へ移動...");
+    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
 
-    console.log("6. VPS管理画面へ直接移動...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle0' });
-
-    console.log("7. 更新ボタンをスキャン中...");
+    console.log("7. 更新ボタンを確認中...");
     await new Promise(r => setTimeout(r, 5000));
     const result = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a'));
