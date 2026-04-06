@@ -7,12 +7,13 @@ const puppeteer = require('puppeteer');
       '--no-sandbox', 
       '--disable-setuid-sandbox', 
       '--lang=ja',
+      '--disable-blink-features=AutomationControlled', // 自動操作フラグを隠す
       '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     ]
   });
   const page = await browser.newPage();
   
-  // ボット検知を避けるためのWebdriver無効化
+  // 自動操作判定（navigator.webdriver）を無効化
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
   });
@@ -26,29 +27,53 @@ const puppeteer = require('puppeteer');
     console.log("2. 会員IDを入力中...");
     await page.waitForSelector('input[name="memberid"]', { visible: true });
     await page.focus('input[name="memberid"]');
-    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 200 });
+    // 人間らしいランダムな打鍵速度
+    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: Math.floor(Math.random() * 100) + 100 });
     
-    console.log("3. Enterキーで『次へ』を試行...");
-    await new Promise(r => setTimeout(r, 1000));
-    await page.keyboard.press('Enter');
+    console.log("3. 『次へ』を確実に実行...");
+    await new Promise(r => setTimeout(r, 2000)); // 読み込み待ち
+
+    // ボタンの座標を取得して物理的にクリック
+    const nextBtn = await page.$('button[name="login_step1"]');
+    if (nextBtn) {
+      await nextBtn.click({ delay: Math.floor(Math.random() * 200) + 100 });
+    } else {
+      await page.keyboard.press('Enter');
+    }
 
     console.log("4. パスワード欄の出現を待機...");
-    // 最大60秒まで待機時間を延長
-    await page.waitForSelector('input[name="password"]', { visible: true, timeout: 60000 });
-    
+    // 待機に失敗した場合は画面内のテキストをログに出して原因を特定する
+    try {
+      await page.waitForSelector('input[name="password"]', { visible: true, timeout: 60000 });
+    } catch (e) {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      console.log("--- 現在の画面テキスト ---");
+      console.log(bodyText.substring(0, 300));
+      throw new Error("パスワード入力欄が表示されませんでした。");
+    }
+
     console.log("5. パスワードを入力中...");
     await page.focus('input[name="password"]');
-    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 200 });
-    await new Promise(r => setTimeout(r, 1000));
-    await page.keyboard.press('Enter');
+    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: Math.floor(Math.random() * 100) + 100 });
+    await new Promise(r => setTimeout(r, 1500));
 
-    console.log("6. ログイン後の遷移を待機...");
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+    const loginBtn = await page.$('button[name="login_step2"]');
+    if (loginBtn) {
+      await Promise.all([
+        loginBtn.click({ delay: 100 }),
+        page.waitForNavigation({ waitUntil: 'networkidle2' }),
+      ]);
+    } else {
+      await Promise.all([
+        page.keyboard.press('Enter'),
+        page.waitForNavigation({ waitUntil: 'networkidle2' }),
+      ]);
+    }
 
-    console.log("7. VPS管理画面へ移動...");
+    console.log("6. VPS管理画面へ移動...");
     await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
 
-    console.log("8. 更新ボタンを確認中...");
+    console.log("7. 更新ボタンを確認中...");
     await new Promise(r => setTimeout(r, 5000));
     const result = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a'));
