@@ -10,28 +10,43 @@ const puppeteer = require('puppeteer');
 
   try {
     console.log("1. ログインページへ移動中...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle2' });
+    await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle0' });
 
     console.log("2. 会員IDを入力中...");
     await page.waitForSelector('input[name="memberid"]', { visible: true });
-    await page.type('input[name="memberid"]', process.env.XSERVER_ID);
+    await page.focus('input[name="memberid"]');
+    await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 150 });
     
-    // ID入力後にEnterを押して次へ進む（ボタンを特定せずに進める方法）
+    // 少し待ってからEnterキーを叩く
+    await new Promise(r => setTimeout(r, 1000));
     await page.keyboard.press('Enter');
 
     console.log("3. パスワード欄の出現を待機...");
-    // ボタンのクリックを待たず、パスワード入力欄が出るのを直接待つ
-    await page.waitForSelector('input[name="password"]', { visible: true, timeout: 30000 });
-    await page.type('input[name="password"]', process.env.XSERVER_PW);
+    // 30秒待っても出ない場合は、現在の画面に何が表示されているか確認する
+    try {
+      await page.waitForSelector('input[name="password"]', { visible: true, timeout: 20000 });
+    } catch (e) {
+      const text = await page.evaluate(() => document.body.innerText);
+      if (text.includes("ロボット")) {
+        throw new Error("ロボットチェック（CAPTCHA）が表示されました。");
+      } else if (text.includes("正しくありません")) {
+        throw new Error("会員IDが正しくありません。");
+      } else {
+        throw new Error(`パスワード欄が出ません。画面内容: ${text.substring(0, 100)}...`);
+      }
+    }
+
+    console.log("4. パスワードを入力中...");
+    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 150 });
     await page.keyboard.press('Enter');
 
-    console.log("4. ログイン後の遷移を待機...");
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+    console.log("5. ログイン後の遷移を待機...");
+    await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
 
-    console.log("5. VPS管理画面へ直接移動...");
-    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
+    console.log("6. VPS管理画面へ直接移動...");
+    await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle0' });
 
-    console.log("6. 更新ボタンをスキャン中...");
+    console.log("7. 更新ボタンをスキャン中...");
     await new Promise(r => setTimeout(r, 5000));
     const result = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a'));
