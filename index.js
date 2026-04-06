@@ -12,28 +12,56 @@ const puppeteer = require('puppeteer');
     console.log("1. ログインページへ移動中...");
     await page.goto('https://secure.xserver.ne.jp/xapanel/login/xserver/', { waitUntil: 'networkidle2' });
 
-    console.log("2. ログイン情報を入力中...");
-    // ID欄の待機と入力
+    console.log("2. 会員IDを入力中...");
     await page.waitForSelector('input[name="memberid"]', { visible: true });
     await page.type('input[name="memberid"]', process.env.XSERVER_ID, { delay: 100 });
-
-    // パスワード欄がすでに表示されている、またはID入力後に自動で出るのを待機
-    await page.waitForSelector('input[name="password"]', { visible: true });
-    await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 100 });
-
-    console.log("3. ログインボタンをクリック...");
-    // 「ログインする」ボタン（login_step2 または type=submit）をクリック
-    const loginBtn = await page.$('button[name="login_step2"]') || await page.$('button[type="submit"]');
     
-    await Promise.all([
-      loginBtn.click(),
-      page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    ]);
+    // ID入力後にボタンがあるか確認し、あれば押す。なければEnter。
+    const step1Btn = await page.$('button[name="login_step1"]');
+    if (step1Btn) {
+      console.log("-> 『次へ』ボタンをクリックしました。");
+      await step1Btn.click();
+    } else {
+      console.log("-> Enterキーを送信しました。");
+      await page.keyboard.press('Enter');
+    }
 
-    console.log("4. VPS管理画面へ移動...");
+    // 画面の変化を少し待つ
+    await new Promise(r => setTimeout(r, 3000));
+
+    // エラーメッセージの有無を確認
+    const errorMessage = await page.evaluate(() => {
+      const el = document.querySelector('.error_message, .alert-danger, .error');
+      return el ? el.innerText : null;
+    });
+
+    if (errorMessage) {
+      console.log(`⚠️ 画面上にエラーが表示されています: ${errorMessage}`);
+      // エラーが出ている場合は、IDが間違っている可能性が高いです。
+    }
+
+    console.log("3. パスワード欄をチェック中...");
+    const hasPasswordField = await page.$('input[name="password"]');
+    
+    if (hasPasswordField) {
+      console.log("-> パスワードを入力します。");
+      await page.type('input[name="password"]', process.env.XSERVER_PW, { delay: 100 });
+      await page.keyboard.press('Enter');
+    } else {
+      console.log("❌ パスワード入力欄が見つかりません。ID入力で弾かれています。");
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      console.log("--- 現在の画面テキスト (詳細) ---");
+      console.log(bodyText.substring(0, 500));
+      process.exit(1);
+    }
+
+    console.log("4. ログイン後の遷移を待機...");
+    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => console.log("待機タイムアウト（無視して進みます）"));
+
+    console.log("5. VPS管理画面へ移動...");
     await page.goto('https://secure.xserver.ne.jp/xapanel/xserver/vps/free_vps/list', { waitUntil: 'networkidle2' });
 
-    console.log("5. 更新ボタンを確認中...");
+    console.log("6. 更新ボタンを確認中...");
     await new Promise(r => setTimeout(r, 5000));
     const result = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a'));
@@ -52,7 +80,7 @@ const puppeteer = require('puppeteer');
     }
 
   } catch (error) {
-    console.error("❌ エラー詳細:", error.message);
+    console.error("❌ システムエラー:", error.message);
     process.exit(1);
   } finally {
     await browser.close();
